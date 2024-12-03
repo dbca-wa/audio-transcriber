@@ -1,0 +1,9 @@
+__pycache__
+.env
+.python-version
+*.mp3
+*.m4a
+*.txt
+*.csv
+/transcripts
+/data

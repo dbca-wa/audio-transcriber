@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "audio-transcriber"
+version = "0.1.0"
+description = "A basic project to make use of the OpenAI Whisper general-purpose speech recognition model to transcribe audio files"
+authors = ["Ashley Felton <ashley@ropable.com>"]
+readme = "README.md"
+license = "MIT"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+feedparser = "6.0.11"
+requests = "2.32.3"
+numba = "0.60.0"
+openai-whisper = "20240930"
+python-dotenv = "1.0.1"
+azure-storage-blob = "12.24.0"
+
+[tool.poetry.group.dev.dependencies]
+ipython = "^8.30.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
