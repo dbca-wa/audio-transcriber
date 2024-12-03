@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
 
@@ -159,24 +160,22 @@ if __name__ == "__main__":
 
         # Download the audio file locally to the temp directory.
         local_dest = TemporaryDirectory()
-        dest_path = os.path.join(local_dest.name, blob_name)
+        dest_path_target = os.path.join(local_dest.name, blob_name)
+        # Generate any required directory path.
+        dir_path = Path(os.path.dirname(dest_path_target))
+        dir_path.mkdir(parents=True)
+        downloaded_blob = open(dest_path_target, "w+b")
+
         blob_client = BlobClient.from_connection_string(
             CONN_STR, input_container_name, blob_name
         )
-
-        try:
-            LOGGER.info(f"Downloading {blob_name}")
-            with open(dest_path, "wb") as downloaded_blob:
-                download_stream = blob_client.download_blob()
-                downloaded_blob.write(download_stream.readall())
-        except Exception as e:
-            LOGGER.error(f"Exception during download of {blob_name}, aborting")
-            LOGGER.exception(e)
-            continue
+        LOGGER.info(f"Downloading {blob_name}")
+        download_stream = blob_client.download_blob()
+        downloaded_blob.write(download_stream.readall())
 
         # Get the transcript for this downloaded audio file.
-        LOGGER.info(f"Transcribing {dest_path}")
-        transcription = get_transcription(model=model, audio_path=dest_path)
+        LOGGER.info(f"Transcribing {dest_path_target}")
+        transcription = get_transcription(model=model, audio_path=dest_path_target)
 
         # Write the transcription.
         audio_path = f"{name}.{format}"
