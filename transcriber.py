@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
 from typing import Optional
@@ -137,7 +138,7 @@ if __name__ == "__main__":
 
     input_container_name = args.container
     model_name = args.model
-    format = args.format
+    transcript_format = args.format
     if not args.dest_container:
         # Set the destination container to be the same as the source.
         output_container_name = input_container_name
@@ -151,43 +152,44 @@ if __name__ == "__main__":
     audio_paths = get_audio_paths(CONN_STR, input_container_name)
     audio_allowlist = [".mp3", ".m4a"]
 
-    for blob_name in audio_paths:
-        name, ext = os.path.splitext(blob_name)
+    for blob_path in audio_paths:
+        audio_filename = os.path.basename(blob_path)
+        audio_path = os.path.dirname(blob_path)
+        name, ext = os.path.splitext(audio_filename)
         if ext.lower() not in audio_allowlist:
-            LOGGER.info(f"Skipping {blob_name}")
+            LOGGER.info(f"Skipping {blob_path}")
             continue  # Skip obvious non-audio files.
 
         # Download the audio file locally to the temp directory.
-        local_dest = TemporaryDirectory()
-        dest_path = os.path.join(local_dest.name, blob_name)
+        tmp_dir = TemporaryDirectory()
+        dest_path = Path(os.path.join(tmp_dir.name, audio_path))
+        dest_path.mkdir(parents=True)
+        dest_file = dest_path.joinpath(audio_filename)
+        downloaded_blob = open(dest_file, "wb")
         blob_client = BlobClient.from_connection_string(
-            CONN_STR, input_container_name, blob_name
+            CONN_STR, input_container_name, blob_path
         )
 
-        try:
-            LOGGER.info(f"Downloading {blob_name}")
-            with open(dest_path, "wb") as downloaded_blob:
-                download_stream = blob_client.download_blob()
-                downloaded_blob.write(download_stream.readall())
-        except Exception as e:
-            LOGGER.error(f"Exception during download of {blob_name}, aborting")
-            LOGGER.exception(e)
-            continue
+        LOGGER.info(f"Downloading {blob_path}")
+        download_stream = blob_client.download_blob()
+        downloaded_blob.write(download_stream.readall())
 
         # Get the transcript for this downloaded audio file.
-        LOGGER.info(f"Transcribing {dest_path}")
-        transcription = get_transcription(model=model, audio_path=dest_path)
+        LOGGER.info(f"Transcribing {dest_file}")
+        transcription = get_transcription(model=model, audio_path=str(dest_file))
 
         # Write the transcription.
-        audio_path = f"{name}.{format}"
-        LOGGER.info(f"Writing transcription for {audio_path}")
-        writer = get_writer(output_format=format, output_dir=local_dest.name)
-        writer(result=transcription, audio_path=f"{name}.{format}")
+        transcription_file = f"{name}.{transcript_format}"
+        transcription_path = os.path.join(dest_path, transcription_file)
+        LOGGER.info(f"Writing transcription to {transcription_path}")
+        writer = get_writer(output_format=transcript_format, output_dir=str(dest_path))
+        writer(result=transcription, audio_path=transcription_file)
 
         # Upload the transcription file to the container.
-        LOGGER.info(f"Uploading transcription to blob {audio_path}")
+        uploaded_transcription_path = os.path.join(audio_path, transcription_file)
+        LOGGER.info(f"Uploading transcription to {uploaded_transcription_path}")
         blob_client = BlobClient.from_connection_string(
-            CONN_STR, output_container_name, f"{audio_path}"
+            CONN_STR, output_container_name, uploaded_transcription_path
         )
-        with open(os.path.join(local_dest.name, audio_path), "rb") as source_data:
-            blob_client.upload_blob(source_data, overwrite=True)
+        source_data = open(transcription_path, "rb")
+        blob_client.upload_blob(source_data, overwrite=True)
