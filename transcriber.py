@@ -1,10 +1,9 @@
 import argparse
 import logging
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Optional
 
 import whisper
 from azure.core.exceptions import ResourceNotFoundError
@@ -32,28 +31,25 @@ azure_logger = logging.getLogger("azure")
 azure_logger.setLevel(logging.WARNING)
 
 
-def get_model(
-    model_name: str = "tiny.en",
-    download_root: Optional[str] = None,
-    in_memory: bool = False,
-):
-    """Return (download if needed) the requested Whisper model (default download
-    location is ~/.cache/whisper)."""
-    return whisper.load_model(
-        name=model_name, download_root=download_root, in_memory=in_memory
-    )
+def get_model(model_name: str = "tiny.en", **kwargs):
+    """Return (download if needed) the requested Whisper model (default model download
+    location is ~/.cache/whisper).
+    Reference: https://github.com/openai/whisper/blob/main/whisper/__init__.py#L103
+    """
+    return whisper.load_model(name=model_name, **kwargs)
 
 
-def get_transcription(
-    model, audio_path: str, language: str = "en", verbose: bool = True
-):
+def get_transcription(model, **kwargs):
     """Transcribe an audio file using a Whisper model, and return a dictionary
     containing the resulting text and segment-level details.
+    Reference: https://github.com/openai/whisper/blob/main/whisper/transcribe.py#L38
+
+    Discussion related to tuning transcription output: https://github.com/openai/whisper/discussions/192
     """
     try:
-        return model.transcribe(audio=audio_path, language=language, verbose=verbose)
+        return model.transcribe(**kwargs)
     except RuntimeError:
-        LOGGER.warning(f"{audio_path} could not be processed")
+        LOGGER.warning(f"{kwargs['audio']} could not be processed")
         return
 
 
@@ -176,7 +172,7 @@ if __name__ == "__main__":
 
         # Get the transcript for this downloaded audio file.
         LOGGER.info(f"Transcribing {dest_file}")
-        transcription = get_transcription(model=model, audio_path=str(dest_file))
+        transcription = get_transcription(model=model, audio=str(dest_file))
 
         # Write the transcription.
         transcription_file = f"{name}.{transcript_format}"
