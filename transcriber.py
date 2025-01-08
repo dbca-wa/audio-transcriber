@@ -159,7 +159,7 @@ if __name__ == "__main__":
         # Download the audio file locally to the temp directory.
         tmp_dir = TemporaryDirectory()
         dest_path = Path(os.path.join(tmp_dir.name, audio_path))
-        dest_path.mkdir(parents=True)
+        dest_path.mkdir(parents=True, exist_ok=True)
         dest_file = dest_path.joinpath(audio_filename)
         downloaded_blob = open(dest_file, "wb")
         blob_client = BlobClient.from_connection_string(
