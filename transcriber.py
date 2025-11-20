@@ -31,7 +31,7 @@ azure_logger = logging.getLogger("azure")
 azure_logger.setLevel(logging.WARNING)
 
 
-def get_model(model_name: str = "tiny.en", **kwargs):
+def get_model(model_name: str = "tiny.en", **kwargs) -> whisper.model.Whisper:
     """Return (download if needed) the requested Whisper model (default model download
     location is ~/.cache/whisper).
     Reference: https://github.com/openai/whisper/blob/main/whisper/__init__.py#L103
@@ -39,7 +39,7 @@ def get_model(model_name: str = "tiny.en", **kwargs):
     return whisper.load_model(name=model_name, **kwargs)
 
 
-def get_transcription(model, **kwargs):
+def get_transcription(model: whisper.model.Whisper, **kwargs) -> dict | None:
     """Transcribe an audio file using a Whisper model, and return a dictionary
     containing the resulting text and segment-level details.
     Reference: https://github.com/openai/whisper/blob/main/whisper/transcribe.py#L38
@@ -50,42 +50,30 @@ def get_transcription(model, **kwargs):
         return model.transcribe(**kwargs)
     except RuntimeError:
         LOGGER.warning(f"{kwargs['audio']} could not be processed")
-        return
+        return None
 
 
-def write_transcription(
-    transcription: dict, name: str, output_format="tsv", output_dir="transcripts"
-):
+def write_transcription(transcription: dict, name: str, output_format="tsv", output_dir="transcripts") -> bool:
     """For the passed-in transcription dict and name, writes an output file of
     the nominated format into `output_dir`."""
     writer = get_writer(output_format, output_dir)
     writer(result=transcription, audio_path=f"{name}.{output_format}")
-    return writer
+    return True
 
 
-def get_audio_paths(conn_str, container_name):
+def get_audio_paths(conn_str: str, container_name: str) -> list[str]:
     """
     Check Azure blob storage for the list of uploaded audio files, returns a
     list of paths.
     """
     try:
-        container_client = ContainerClient.from_connection_string(
-            conn_str, container_name
-        )
+        container_client = ContainerClient.from_connection_string(conn_str, container_name)
         blob_list = container_client.list_blobs()
         remote_blobs = [blob.name for blob in blob_list]
     except ResourceNotFoundError:
         remote_blobs = []
 
     return remote_blobs
-
-
-def get_blob_client(conn_str, container_name, blob_name):
-    return BlobClient.from_connection_string(
-        conn_str,
-        container_name,
-        blob_name,
-    )
 
 
 if __name__ == "__main__":
@@ -162,9 +150,7 @@ if __name__ == "__main__":
         dest_path.mkdir(parents=True, exist_ok=True)
         dest_file = dest_path.joinpath(audio_filename)
         downloaded_blob = open(dest_file, "wb")
-        blob_client = BlobClient.from_connection_string(
-            CONN_STR, input_container_name, blob_path
-        )
+        blob_client = BlobClient.from_connection_string(CONN_STR, input_container_name, blob_path)
 
         LOGGER.info(f"Downloading {blob_path}")
         download_stream = blob_client.download_blob()
@@ -184,8 +170,6 @@ if __name__ == "__main__":
         # Upload the transcription file to the container.
         uploaded_transcription_path = os.path.join(audio_path, transcription_file)
         LOGGER.info(f"Uploading transcription to {uploaded_transcription_path}")
-        blob_client = BlobClient.from_connection_string(
-            CONN_STR, output_container_name, uploaded_transcription_path
-        )
+        blob_client = BlobClient.from_connection_string(CONN_STR, output_container_name, uploaded_transcription_path)
         source_data = open(transcription_path, "rb")
         blob_client.upload_blob(source_data, overwrite=True)
