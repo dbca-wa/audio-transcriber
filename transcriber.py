@@ -4,6 +4,7 @@ import os
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import List, Optional
 
 import whisper
 from azure.core.exceptions import ResourceNotFoundError
@@ -14,7 +15,7 @@ from whisper.utils import get_writer
 # Load environment variables.
 load_dotenv()
 # Assumes a connection string secret present as an environment variable.
-CONN_STR = os.getenv("AZURE_CONNECTION_STRING")
+CONN_STR = os.getenv("AZURE_CONNECTION_STRING", "")
 
 # Configure logging for the default logger and for the `azure` logger.
 LOGGER = logging.getLogger()
@@ -53,7 +54,7 @@ def get_transcription(model: whisper.model.Whisper, **kwargs) -> dict | None:
         return None
 
 
-def write_transcription(transcription: dict, name: str, output_format="tsv", output_dir="transcripts") -> bool:
+def write_transcription(transcription: dict, name: str, output_format: str = "tsv", output_dir: str = "transcripts") -> bool:
     """For the passed-in transcription dict and name, writes an output file of
     the nominated format into `output_dir`."""
     writer = get_writer(output_format, output_dir)
@@ -61,14 +62,17 @@ def write_transcription(transcription: dict, name: str, output_format="tsv", out
     return True
 
 
-def get_audio_paths(conn_str: str, container_name: str) -> list[str]:
+def get_audio_paths(conn_str: str, container_name: str, prefix: Optional[str] = None) -> List[str]:
     """
     Check Azure blob storage for the list of uploaded audio files, returns a
     list of paths.
     """
     try:
         container_client = ContainerClient.from_connection_string(conn_str, container_name)
-        blob_list = container_client.list_blobs()
+        if prefix:
+            blob_list = container_client.list_blobs(name_starts_with=prefix)
+        else:
+            blob_list = container_client.list_blobs()
         remote_blobs = [blob.name for blob in blob_list]
     except ResourceNotFoundError:
         remote_blobs = []
@@ -96,6 +100,13 @@ if __name__ == "__main__":
         required=True,
     )
     parser.add_argument(
+        "-p",
+        "--prefix",
+        help="Prefix string for filtering input audio files (optional)",
+        action="store",
+        required=False,
+    )
+    parser.add_argument(
         "-m",
         "--model",
         help="Whisper speech recognition model name to use (optional)",
@@ -121,8 +132,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     input_container_name = args.container
+    prefix = str(args.prefix)
     model_name = args.model
-    transcript_format = args.format
+    output_format = args.format
+
     if not args.dest_container:
         # Set the destination container to be the same as the source.
         output_container_name = input_container_name
@@ -133,16 +146,18 @@ if __name__ == "__main__":
     model = get_model(model_name)
 
     # First, get a directory listing for the nominated input container.
-    audio_paths = get_audio_paths(CONN_STR, input_container_name)
-    audio_allowlist = [".mp3", ".m4a"]
+    audio_paths = get_audio_paths(conn_str=CONN_STR, container_name=input_container_name, prefix=prefix)
+    audio_extensions = [".mp3", ".m4a"]  # TODO: don't hardcode this list.
+
+    LOGGER.info(f"Processing {len(audio_paths)} files")
 
     for blob_path in audio_paths:
         audio_filename = os.path.basename(blob_path)
         audio_path = os.path.dirname(blob_path)
         name, ext = os.path.splitext(audio_filename)
-        if ext.lower() not in audio_allowlist:
+        if ext.lower() not in audio_extensions:
             LOGGER.info(f"Skipping {blob_path}")
-            continue  # Skip obvious non-audio files.
+            continue  # Skip non-audio files.
 
         # Download the audio file locally to the temp directory.
         tmp_dir = TemporaryDirectory()
@@ -159,13 +174,17 @@ if __name__ == "__main__":
         # Get the transcript for this downloaded audio file.
         LOGGER.info(f"Transcribing {dest_file}")
         transcription = get_transcription(model=model, audio=str(dest_file))
+        if not transcription:
+            LOGGER.warning(f"Unable to get transcription for {dest_file}")
+            continue
 
         # Write the transcription.
-        transcription_file = f"{name}.{transcript_format}"
+        transcription_file = f"{name}.{output_format}"
         transcription_path = os.path.join(dest_path, transcription_file)
         LOGGER.info(f"Writing transcription to {transcription_path}")
-        writer = get_writer(output_format=transcript_format, output_dir=str(dest_path))
-        writer(result=transcription, audio_path=transcription_file)
+
+        output_dir = str(dest_path)
+        transcription_result = write_transcription(transcription, name, output_format, output_dir)
 
         # Upload the transcription file to the container.
         uploaded_transcription_path = os.path.join(audio_path, transcription_file)
