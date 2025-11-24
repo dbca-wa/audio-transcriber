@@ -24,15 +24,7 @@ LABEL org.opencontainers.image.source=https://github.com/dbca-wa/audio-transcrib
 RUN apt-get update -y \
   && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends ffmpeg \
-  # && apt-get install -y wget libmagic-dev gcc binutils python3-dev ffmpeg lsb-release software-properties-common gnupg \
   && rm -rf /var/lib/apt/lists/*
-
-# We have to install LLVM 15, as this is what llvmlite builds against at present.
-# RUN wget https://apt.llvm.org/llvm.sh \
-#   && chmod +x llvm.sh \
-#   && ./llvm.sh 15
-# ENV LLVM_CONFIG=/usr/bin/llvm-config-15
-# RUN rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user.
 RUN groupadd -r -g 1000 app \
