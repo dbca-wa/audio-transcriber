@@ -37,3 +37,10 @@ The following variables are required for the project to run:
 Run locally like so:
 
     python transcriber.py --help
+
+## Docker image build
+
+Build and push a multi-architecture-capable image from the `Dockerfile` like so:
+
+    docker buildx create --name container-builder --driver docker-container --use --bootstrap
+    docker buildx build --push --platform linux/amd64,linux/arm64 -t ghcr.io/dbca-wa/audio-transcriber .
