@@ -62,7 +62,7 @@ def write_transcription(transcription: dict, name: str, output_format: str = "ts
     return True
 
 
-def get_audio_paths(conn_str: str, container_name: str, prefix: Optional[str] = None) -> List[str]:
+def get_blob_paths(conn_str: str, container_name: str, prefix: Optional[str] = None) -> List[str]:
     """
     Check Azure blob storage for the list of uploaded audio files, returns a
     list of paths.
@@ -129,6 +129,13 @@ if __name__ == "__main__":
         action="store",
         required=False,
     )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        dest="overwrite",
+        help="Overwrite existing transcript outputs",
+    )
+
     args = parser.parse_args()
 
     input_container_name = args.container
@@ -146,28 +153,39 @@ if __name__ == "__main__":
     model = get_model(model_name)
 
     # First, get a directory listing for the nominated input container.
-    audio_paths = get_audio_paths(conn_str=CONN_STR, container_name=input_container_name, prefix=prefix)
+    blob_paths = get_blob_paths(conn_str=CONN_STR, container_name=input_container_name, prefix=prefix)
     audio_extensions = [".mp3", ".m4a"]  # TODO: don't hardcode this list.
 
-    LOGGER.info(f"Processing {len(audio_paths)} files")
+    # Set up a temp directory to save downloads.
+    tmp_dir = TemporaryDirectory()
 
-    for blob_path in audio_paths:
+    LOGGER.info(f"Processing {len(blob_paths)} files")
+
+    for blob_path in blob_paths:
         audio_filename = os.path.basename(blob_path)
         audio_path = os.path.dirname(blob_path)
         name, ext = os.path.splitext(audio_filename)
+
+        # Skip non-audio files.
         if ext.lower() not in audio_extensions:
-            LOGGER.info(f"Skipping {blob_path}")
             continue  # Skip non-audio files.
 
+        local_path = Path(os.path.join(tmp_dir.name, audio_path))
+        transcription_file = f"{name}.{output_format}"
+        transcription_path = os.path.join(local_path, transcription_file)
+        uploaded_transcription_path = os.path.join(audio_path, transcription_file)
+
+        # If the expected output transcription already exist in the container and overwrite == False, skip the file.
+        if uploaded_transcription_path in blob_paths and not args.overwrite:
+            LOGGER.info(f"Skipping {blob_path} (transcription {transcription_file} already present)")
+            continue
+
         # Download the audio file locally to the temp directory.
-        tmp_dir = TemporaryDirectory()
-        dest_path = Path(os.path.join(tmp_dir.name, audio_path))
-        dest_path.mkdir(parents=True, exist_ok=True)
-        dest_file = dest_path.joinpath(audio_filename)
+        LOGGER.info(f"Downloading {blob_path}")
+        local_path.mkdir(parents=True, exist_ok=True)
+        dest_file = local_path.joinpath(audio_filename)
         downloaded_blob = open(dest_file, "wb")
         blob_client = BlobClient.from_connection_string(CONN_STR, input_container_name, blob_path)
-
-        LOGGER.info(f"Downloading {blob_path}")
         download_stream = blob_client.download_blob()
         downloaded_blob.write(download_stream.readall())
 
@@ -179,15 +197,11 @@ if __name__ == "__main__":
             continue
 
         # Write the transcription.
-        transcription_file = f"{name}.{output_format}"
-        transcription_path = os.path.join(dest_path, transcription_file)
         LOGGER.info(f"Writing transcription to {transcription_path}")
-
-        output_dir = str(dest_path)
+        output_dir = str(local_path)
         transcription_result = write_transcription(transcription, name, output_format, output_dir)
 
         # Upload the transcription file to the container.
-        uploaded_transcription_path = os.path.join(audio_path, transcription_file)
         LOGGER.info(f"Uploading transcription to {uploaded_transcription_path}")
         blob_client = BlobClient.from_connection_string(CONN_STR, output_container_name, uploaded_transcription_path)
         source_data = open(transcription_path, "rb")
