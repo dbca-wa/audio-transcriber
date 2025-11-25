@@ -1,6 +1,6 @@
 [project]
 name = "audio-transcriber"
-version = "0.1.1"
+version = "0.1.2"
 description = "A basic project to make use of the OpenAI Whisper general-purpose speech recognition model to transcribe audio files"
 authors = [{ name = "Ashley Felton", email = "ashley.felton@dbca.wa.gov.au" }]
 license = "MIT"
@@ -8,7 +8,7 @@ requires-python = ">=3.13,<4.0"
 dependencies = [
   "ipython>=9.7.0",
   "openai-whisper==20250625",
-  "python-dotenv==1.1.1",
+  "python-dotenv==1.2.1",
   "requests==2.32.5",
   "azure-storage-blob==12.27.1",
 ]
@@ -16,7 +16,6 @@ dependencies = [
 [tool.ruff]
 line-length = 140
 indent-width = 4
-extend-exclude = ["migrations"]
 
 [tool.ruff.lint]
 ignore = ["E265", "E501", "E722"]
