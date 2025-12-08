@@ -38,6 +38,23 @@ Run locally like so:
 
     python transcriber.py --help
 
+Generate a transcript output for a local file like so:
+
+```python
+import os
+from pathlib import Path
+from transcriber import get_model, get_transcription, write_transcription
+
+# Assuming audio files are saved to 'data':
+data_path = Path(os.curdir, "data")
+input_file_path = os.path.join(data_path, '17-7-25 kps13 p151 (obs 1).m4a')
+
+# Instantiate the model, generate and write the transcription (TSV, transcript directory).
+model = get_model("small.en")
+transcription = model.transcribe(audio=input_file_path, initial_prompt="Field observations of pollinator insects:", language="en")
+write_transcription(transcription, "17-7-25 kps13 p151 (obs 1)")
+```
+
 ## Docker image build
 
 Build and push a multi-architecture-capable image from the `Dockerfile` like so:
