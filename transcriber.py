@@ -48,7 +48,7 @@ def get_transcription(model: whisper.model.Whisper, **kwargs) -> dict | None:
     Discussion related to tuning transcription output: https://github.com/openai/whisper/discussions/192
     """
     try:
-        return model.transcribe(**kwargs)
+        return model.transcribe(initial_prompt="Field observations of pollinator insects:", language="en", **kwargs)
     except RuntimeError:
         LOGGER.warning(f"{kwargs['audio']} could not be processed")
         return None
